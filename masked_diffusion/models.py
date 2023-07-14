@@ -587,6 +587,10 @@ def MDT_L_8(**kwargs):
     return MDT(depth=24, hidden_size=1024, patch_size=8, num_heads=16, **kwargs)
 
 
+def MDT_M_2(**kwargs):
+    return MDT(depth=16, hidden_size=768, patch_size=2, num_heads=16, **kwargs)
+
+
 def MDT_B_2(**kwargs):
     return MDT(depth=12, hidden_size=768, patch_size=2, num_heads=12, **kwargs)
 

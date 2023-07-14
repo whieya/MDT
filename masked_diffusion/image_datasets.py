@@ -7,6 +7,7 @@ from mpi4py import MPI
 import numpy as np
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
+from pathlib import Path
 
 def load_data_mo(
     *,
@@ -40,7 +41,7 @@ def load_data_mo(
         raise ValueError("unspecified data directory")
 
     # all_files = _list_image_files_recursively(data_dir)
-    all_files = [x for x in Path(data_dir).glob('*/*.png') if 'image' in x.name]
+    all_files = [str(x) for x in Path(data_dir).glob('train/*/*.png') if 'image' in x.name]
 
     classes = None
     if class_cond:
@@ -55,6 +56,7 @@ def load_data_mo(
         img_size = image_size,
         shard=MPI.COMM_WORLD.Get_rank(),
         num_shards=MPI.COMM_WORLD.Get_size(),
+        classes=classes,
             )
 
     if deterministic:
@@ -142,20 +144,19 @@ def _list_image_files_recursively(data_dir):
 
 # DATAset for Movi-E dataset
 class MOVI_C(Dataset):
-    def __init__(self, all_files, img_size, shard=0, num_shards=0):
+    def __init__(self, all_files, img_size, shard=0, num_shards=0, classes=None):
         image_paths = all_files
         self.img_size = img_size
-        self.num_segs = num_segs
 
         self.local_images = image_paths[shard:][::num_shards]
         self.local_classes = classes[shard:][::num_shards]
 
-        self.transform = transforms.Compose(
-            [
-                transforms.RandomHorizontalFlip() if args.random_flip else transforms.Lambda(lambda x: x),
-                transforms.ToTensor(),
-                transforms.Normalize([0.5], [0.5]),
-            ])
+        # self.transform = transforms.Compose(
+        #     [
+        #         transforms.RandomHorizontalFlip() if args.random_flip else transforms.Lambda(lambda x: x),
+        #         transforms.ToTensor(),
+        #         transforms.Normalize([0.5], [0.5]),
+        #     ])
 
         # self.transform_mask = transform_mask
         print(f'length of the dataset : {len(self.local_images)}')
@@ -164,14 +165,21 @@ class MOVI_C(Dataset):
         return len(self.local_images)
 
     def __getitem__(self, idx):
-        arr = Image.open(self.local_images[idx]).convert('RGB')
+        path = self.local_images[idx]
+        with bf.BlobFile(path, "rb") as f:
+            pil_image = Image.open(f)
+            pil_image.load()
+        pil_image = pil_image.convert("RGB")
+        arr = np.array(pil_image)
+
         if random.random() < 0.5:
             arr = arr[:, ::-1]
 
         arr = arr.astype(np.float32) / 127.5 - 1
         out_dict = {}
         if self.local_classes is not None:
-            out_dict["y"] = np.array(self.local_classes[idx], dtype=np.int64)
+            #out_dict["y"] = np.array(self.local_classes[idx], dtype=np.int64)
+            out_dict["y"] = np.array(0, dtype=np.int64)
         return np.transpose(arr, [2, 0, 1]), out_dict
 
 

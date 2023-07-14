@@ -158,28 +158,43 @@ class TensorBoardOutputFormat(KVWriter):
         self.step = 1
         prefix = "events"
         path = osp.join(osp.abspath(dir), prefix)
-        import tensorflow as tf
-        from tensorflow.python import pywrap_tensorflow
-        from tensorflow.core.util import event_pb2
-        from tensorflow.python.util import compat
+        from torch.utils.tensorboard import SummaryWriter
+        self.writer = SummaryWriter(path)
 
-        self.tf = tf
-        self.event_pb2 = event_pb2
-        self.pywrap_tensorflow = pywrap_tensorflow
-        self.writer = pywrap_tensorflow.EventsWriter(compat.as_bytes(path))
+        # import tensorflow as tf
+        # from tensorflow.python import pywrap_tensorflow
+        # from tensorflow.core.util import event_pb2
+        # from tensorflow.python.util import compat
+        # from tensorflow.python.client import _pywrap_events_writer
+
+
+        # self.tf = tf
+        # self.event_pb2 = event_pb2
+        # self.pywrap_tensorflow = pywrap_tensorflow
+        # # self.writer = pywrap_tensorflow.EventsWriter(compat.as_bytes(path))
+        # # self.writer = _pywrap_events_writer.EventsWriter(compat.as_bytes(path))
+
+        # self.writer = self.tf.summary.create_file_writer(path)
+        # self.log_dir = path
 
     def writekvs(self, kvs):
         def summary_val(k, v):
             kwargs = {"tag": k, "simple_value": float(v)}
-            return self.tf.Summary.Value(**kwargs)
+            # return self.tf.summary.value(**kwargs)
+            #return self.tf.Summary.Value(**kwargs)
+            return False
 
-        summary = self.tf.Summary(value=[summary_val(k, v) for k, v in kvs.items()])
-        event = self.event_pb2.Event(wall_time=time.time(), summary=summary)
-        event.step = (
-            self.step
-        )  # is there any reason why you'd want to specify the step?
-        self.writer.WriteEvent(event)
-        self.writer.Flush()
+        for k,v in kvs.items():
+            self.writer.add_scalar(k, v, self.step)
+        self.writer.flush()
+
+        # summary = self.tf.Summary(value=[summary_val(k, v) for k, v in kvs.items()])
+        # event = self.event_pb2.Event(wall_time=time.time(), summary=summary)
+        # event.step = (
+        #     self.step
+        # )  # is there any reason why you'd want to specify the step?
+        # self.writer.WriteEvent(event)
+        # self.writer.Flush()
         self.step += 1
 
     def close(self):
@@ -460,7 +475,8 @@ def configure(dir=None, format_strs=None, comm=None, log_suffix=""):
 
     if format_strs is None:
         if rank == 0:
-            format_strs = os.getenv("OPENAI_LOG_FORMAT", "stdout,log,csv").split(",")
+            # format_strs = os.getenv("OPENAI_LOG_FORMAT", "stdout,log,csv").split(",")
+            format_strs = os.getenv("OPENAI_LOG_FORMAT", "stdout,log,tensorboard").split(",")
         else:
             format_strs = os.getenv("OPENAI_LOG_FORMAT_MPI", "log").split(",")
     format_strs = filter(None, format_strs)

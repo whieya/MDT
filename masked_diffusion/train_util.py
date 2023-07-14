@@ -188,6 +188,10 @@ class TrainLoop:
         if (self.step - 1) % self.save_interval != 0:
             self.save()
 
+        # # Sample generation.
+        # if (self.step - 1) % 100 != 0:
+        #     self.gen_samples()
+
     def run_step(self, batch, cond):
         self.forward_backward(batch, cond)
         took_step = self.mp_trainer.optimize(self.opt)
@@ -290,6 +294,65 @@ class TrainLoop:
 
         dist.barrier()
 
+    '''
+    def gen_samples(self):
+        def save_checkpoint(rate, params):
+            state_dict = self.mp_trainer.master_params_to_state_dict(params)
+            if dist.get_rank() == 0:
+                logger.log(f"saving model {rate}...")
+                if not rate:
+                    filename = f"model{(self.step+self.resume_step):06d}.pt"
+                else:
+                    filename = f"ema_{rate}_{(self.step+self.resume_step):06d}.pt"
+                with bf.BlobFile(bf.join(get_blob_logdir(), filename), "wb") as f:
+                    th.save(state_dict, f)
+
+        save_checkpoint(0, self.mp_trainer.master_params)
+        for rate, params in zip(self.ema_rate, self.ema_params):
+            save_checkpoint(rate, params)
+
+        if dist.get_rank() == 0:
+            # generate samples
+            with bf.BlobFile(
+                bf.join(get_blob_logdir(), f"opt{(self.step+self.resume_step):06d}.pt"),
+                "wb",
+            ) as f:
+                th.save(self.opt.state_dict(), f)
+
+
+        if dist.get_rank() == 0:
+            device = "cuda"
+
+            # Labels to condition the model with:
+            class_labels = [0]*64
+
+            # Create sampling noise:
+            n = len(class_labels)
+            z = torch.randn(n, 4, latent_size, latent_size, device=device)
+            y = torch.tensor(class_labels, device=device)
+
+            # Setup classifier-free guidance:
+            z = torch.cat([z, z], 0)
+            y_null = torch.tensor([1000] * n, device=device)
+            y = torch.cat([y, y_null], 0)
+
+            num_sampling_steps = 1000
+            cfg_scale = 5.0
+            pow_scale = 0.01 # large pow_scale increase the diversity, small pow_scale increase the quality.
+
+            model_kwargs = dict(y=y, cfg_scale=cfg_scale, scale_pow=pow_scale)
+
+            # Sample images:
+            samples = diffusion.p_sample_loop(
+                self.model.forward_with_cfg, z.shape, z, clip_denoised=False, model_kwargs=model_kwargs, progress=True, device=device
+            )
+            samples, _ = samples.chunk(2, dim=0)  # Remove null class samples
+            samples = vae.decode(samples / 0.18215).sample
+
+                # Save and display images:
+            save_image(samples, "sample.png", nrow=3, normalize=True, value_range=(-1, 1))
+        dist.barrier()
+    '''
 
 def parse_resume_step_from_filename(filename):
     """

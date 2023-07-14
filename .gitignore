@@ -1,0 +1,6 @@
+*.png
+*.txt
+*.pyc
+*.jpg
+*.pt
+**events.out**

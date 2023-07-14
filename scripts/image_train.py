@@ -5,7 +5,7 @@ Train a diffusion model on images.
 import argparse
 
 from masked_diffusion import dist_util, logger
-from masked_diffusion.image_datasets import load_data
+from masked_diffusion.image_datasets import load_data, load_data_mo
 from masked_diffusion.resample import create_named_schedule_sampler
 from masked_diffusion.script_util import (
     args_to_dict,
@@ -14,6 +14,7 @@ from masked_diffusion.script_util import (
 from masked_diffusion.train_util import TrainLoop
 from masked_diffusion import create_diffusion, model_and_diffusion_defaults, diffusion_defaults
 import masked_diffusion.models as models_mdt
+import torch
 
 def main():
     args = create_argparser().parse_args()
@@ -35,7 +36,8 @@ def main():
     schedule_sampler = create_named_schedule_sampler(args.schedule_sampler, diffusion)
 
     logger.log("creating data loader...")
-    data = load_data(
+    data = load_data_mo(
+    #data = load_data(
         data_dir=args.data_dir,
         batch_size=args.batch_size,
         image_size=args.image_size,
@@ -66,13 +68,13 @@ def create_argparser():
     defaults = dict(
         data_dir="",
         schedule_sampler="uniform",
-        lr=3e-4,
+        lr=1e-4,
         weight_decay=0.0,
         lr_anneal_steps=0,
         batch_size=1,
         microbatch=-1,  # -1 disables microbatches
         ema_rate="0.9999",  # comma-separated list of EMA values
-        log_interval=10,
+        log_interval=100,
         save_interval=10000,
         resume_checkpoint="",
         use_fp16=False,
@@ -97,4 +99,11 @@ def create_argparser():
 
 
 if __name__ == "__main__":
+    # # The flag below controls whether to allow TF32 on matmul. This flag defaults to False
+    # # in PyTorch 1.12 and later.
+    # torch.backends.cuda.matmul.allow_tf32 = True
+
+    # # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
+    # torch.backends.cudnn.allow_tf32 = True
+
     main()
